@@ -50,6 +50,10 @@ export function activate(context: vscode.ExtensionContext) {
   commandManager.register(new command.AddPromptCommand(galleryProvider));
   commandManager.register(new command.DeletePromptCommand(galleryProvider));
   commandManager.register(new command.EditPromptCommand(galleryProvider));
+  commandManager.register(new command.CheckVSCodeLLMAuthCommand());
+  commandManager.register(new command.SelectVSCodeLLMModelCommand());
+  commandManager.register(new command.ShowVSCodeLLMStatusCommand());
+  commandManager.register(new command.ConfigureVSCodeLLMCommand());
 
   registerPomlChatParticipant(context, galleryProvider);
 

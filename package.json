@@ -171,6 +171,30 @@
         "title": "Edit Prompt",
         "category": "POML",
         "icon": "$(pencil)"
+      },
+      {
+        "command": "poml.checkVSCodeLLMAuth",
+        "title": "Check VSCode Language Model Authentication",
+        "category": "POML",
+        "icon": "$(key)"
+      },
+      {
+        "command": "poml.selectVSCodeLLMModel",
+        "title": "Select VSCode Language Model",
+        "category": "POML",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "poml.showVSCodeLLMStatus",
+        "title": "Show VSCode Language Model Status",
+        "category": "POML",
+        "icon": "$(info)"
+      },
+      {
+        "command": "poml.configureVSCodeLLM",
+        "title": "Configure VSCode Language Models",
+        "category": "POML",
+        "icon": "$(settings)"
       }
     ],
     "chatParticipants": [
@@ -249,13 +273,15 @@
             "openai",
             "microsoft",
             "anthropic",
-            "google"
+            "google",
+            "vscode"
           ],
           "enumItemLabels": [
             "OpenAI",
             "Azure OpenAI",
             "Anthropic",
-            "Google GenAI"
+            "Google GenAI",
+            "VSCode Language Models"
           ],
           "default": "openai",
           "markdownDescription": "The language model provider to send your prompt to."
@@ -297,6 +323,23 @@
           "description": "Language Model API Version",
           "default": "",
           "markdownDescription": "The API version for the language model provider (mostly used for OpenAI and Azure OpenAI)."
+        },
+        "poml.languageModel.vscode.selectedModel": {
+          "type": "string",
+          "description": "Selected VSCode Language Model",
+          "default": "",
+          "markdownDescription": "The selected language model from VSCode's available models. Use the command 'POML: Select VSCode Language Model' to choose from available models."
+        },
+        "poml.languageModel.vscode.authenticationStatus": {
+          "type": "string",
+          "description": "VSCode Language Model Authentication Status",
+          "enum": [
+            "unknown",
+            "authenticated",
+            "unauthenticated"
+          ],
+          "default": "unknown",
+          "markdownDescription": "The authentication status for VSCode language models. This is automatically updated by the extension."
         },
         "poml.telemetry.connection": {
           "type": "string",

@@ -5,7 +5,7 @@ import { PanelSettings } from 'poml-vscode/panel/types';
 import { PreviewMethodName, PreviewParams, PreviewResponse } from '../panel/types';
 import { getClient } from '../extension';
 import { Message, RichContent } from 'poml';
-const { BaseChatModel } = require('@langchain/core/language_models/chat_models');  // eslint-disable-line
+const { BaseChatModel } = require('@langchain/core/language_models/chat_models'); // eslint-disable-line
 const {
   HumanMessage,
   AIMessage,
@@ -13,10 +13,10 @@ const {
   BaseMessage,
   MessageContent,
   MessageContentComplex
-} = require('@langchain/core/messages');  // eslint-disable-line
+} = require('@langchain/core/messages'); // eslint-disable-line
 // import { ChatAnthropic } from "@langchain/anthropic";
-const { AzureChatOpenAI, ChatOpenAI, AzureOpenAI, OpenAI } = require('@langchain/openai');  // eslint-disable-line
-const { ChatGoogleGenerativeAI, GoogleGenerativeAI } = require('@langchain/google-genai');  // eslint-disable-line
+const { AzureChatOpenAI, ChatOpenAI, AzureOpenAI, OpenAI } = require('@langchain/openai'); // eslint-disable-line
+const { ChatGoogleGenerativeAI, GoogleGenerativeAI } = require('@langchain/google-genai'); // eslint-disable-line
 import ModelClient from '@azure-rest/ai-inference';
 import { AzureKeyCredential } from '@azure/core-auth';
 import { createSseStream } from '@azure/core-sse';
@@ -25,6 +25,7 @@ import { LanguageModelSetting } from 'poml-vscode/settings';
 import { IncomingMessage } from 'node:http';
 import { getTelemetryReporter } from 'poml-vscode/util/telemetryClient';
 import { TelemetryEvent } from 'poml-vscode/util/telemetryServer';
+import { VSCodeLLMService } from '../vscode-llm-service';
 
 let _globalGenerationController: GenerationController | undefined = undefined;
 
@@ -102,18 +103,70 @@ export class TestCommand implements Command {
 
     // Check if language model settings are configured
     const setting = this.getLanguageModelSettings(uri);
-    if (!setting || !setting.provider || !setting.model || !setting.apiKey || !setting.apiUrl) {
+    if (!setting || !setting.provider) {
       vscode.window.showErrorMessage(
-        'Language model settings are not fully configured. Please set your provider, model, API key, and endpoint in the extension settings before testing prompts.'
+        'Language model provider is not configured. Please set your provider in the extension settings before testing prompts.'
       );
-      this.log('error', 'Prompt test aborted: LLM settings not configured.');
+      this.log('error', 'Prompt test aborted: LLM provider not configured.');
       return;
+    }
+
+    // Validate settings based on provider
+    if (setting.provider === 'vscode') {
+      const llmService = VSCodeLLMService.getInstance();
+      if (!llmService.isAvailable()) {
+        vscode.window.showErrorMessage(
+          'VSCode Language Model API is not available. Please update to a newer version of VSCode (1.90+).'
+        );
+        this.log('error', 'Prompt test aborted: VSCode LLM API not available.');
+        return;
+      }
+
+      const authStatus = llmService.getAuthenticationStatus();
+      if (authStatus !== 'authenticated') {
+        const action = await vscode.window.showErrorMessage(
+          'You need to authenticate with a language model provider first.',
+          'Check Authentication'
+        );
+        if (action === 'Check Authentication') {
+          await vscode.commands.executeCommand('poml.checkVSCodeLLMAuth');
+        }
+        this.log('error', 'Prompt test aborted: VSCode LLM not authenticated.');
+        return;
+      }
+
+      if (!setting.vscode?.selectedModel) {
+        const action = await vscode.window.showErrorMessage(
+          'No VSCode language model selected.',
+          'Select Model'
+        );
+        if (action === 'Select Model') {
+          await vscode.commands.executeCommand('poml.selectVSCodeLLMModel');
+        }
+        this.log('error', 'Prompt test aborted: No VSCode LLM model selected.');
+        return;
+      }
+    } else {
+      // Validate external provider settings
+      if (!setting.model || !setting.apiKey || !setting.apiUrl) {
+        vscode.window.showErrorMessage(
+          'Language model settings are not fully configured. Please set your model, API key, and endpoint in the extension settings before testing prompts.'
+        );
+        this.log('error', 'Prompt test aborted: External LLM settings not configured.');
+        return;
+      }
     }
 
     this.log(
       'info',
       `Testing prompt with ${this.isChatting ? 'chat model' : 'text completion model'}: ${fileUrl}`
     );
+    this.log('info', `Language model provider: ${setting.provider}`);
+    this.log('info', `Language model: ${setting.model}`);
+    if (setting.provider === 'vscode') {
+      this.log('info', `VSCode LLM selected model: ${setting.vscode?.selectedModel}`);
+      this.log('info', `VSCode LLM auth status: ${setting.vscode?.authenticationStatus}`);
+    }
     const startTime = Date.now();
     let nextInterval: number = 1;
     const showProgress = () => {
@@ -142,7 +195,10 @@ export class TestCommand implements Command {
       }
       this.outputChannel.appendLine('');
       const timeElapsed = Date.now() - startTime;
-      this.log('info', `Test completed in ${Math.round(timeElapsed / 1000)} seconds. Language models can make mistakes. Check important info.`);
+      this.log(
+        'info',
+        `Test completed in ${Math.round(timeElapsed / 1000)} seconds. Language models can make mistakes. Check important info.`
+      );
 
       if (reporter) {
         reporter.reportTelemetry(TelemetryEvent.PromptTestingEnd, {
@@ -175,22 +231,98 @@ export class TestCommand implements Command {
   }
 
   private async renderPrompt(uri: vscode.Uri) {
+    this.log('info', `Starting to render prompt: ${uri.toString()}`);
+
     const options = this.previewManager.previewConfigurations.getResourceOptions(uri);
+    this.log(
+      'info',
+      `Resource options: contexts=${options.contexts.length}, stylesheets=${options.stylesheets.length}`
+    );
+
+    // Provide comprehensive context variables that POML templates might expect
+    // For test command, we provide default/placeholder values since there's no user interaction
+
+    // Get the currently active file if available to provide as context
+    const activeEditor = vscode.window.activeTextEditor;
+    const activeFile = activeEditor?.document.uri.fsPath;
+
+    const inlineContext = {
+      files: activeFile ? [activeFile] : [], // Use active file if available, otherwise empty
+      file: activeFile || '', // Single file variable (for templates that might reference it directly)
+      prompt: 'Test prompt execution', // Default prompt text for testing
+      // Add other common variables that templates might expect
+      user: 'Test User',
+      task: 'Test prompt execution',
+      request: 'Test prompt execution'
+    };
+
+    // If no active file is available, provide a helpful message in the context
+    if (!activeFile) {
+      this.log(
+        'info',
+        'No active file available. Templates requiring file content may not render properly.'
+      );
+      // You could also provide a dummy file path here if needed:
+      // inlineContext.files = [path.join(__dirname, 'dummy.txt')];
+    }
+
+    this.log('info', `Inline context: ${JSON.stringify(inlineContext, null, 2)}`);
+
     const requestParams: PreviewParams = {
       uri: uri.toString(),
       speakerMode: this.isChatting,
       displayFormat: 'rendered',
       contexts: options.contexts,
       stylesheets: options.stylesheets,
+      inlineContext: inlineContext
     };
 
-    const response: PreviewResponse = await getClient().sendRequest<PreviewResponse>(
-      PreviewMethodName,
-      requestParams
+    this.log(
+      'info',
+      `Sending preview request with params: ${JSON.stringify({
+        uri: requestParams.uri,
+        speakerMode: requestParams.speakerMode,
+        displayFormat: requestParams.displayFormat,
+        contextsCount: requestParams.contexts.length,
+        stylesheetsCount: requestParams.stylesheets.length,
+        inlineContext: requestParams.inlineContext
+      })}`
     );
-    if (response.error) {
-      throw new Error(`Error rendering prompt: ${uri}\n${response.error}`);
+
+    let response: PreviewResponse;
+    try {
+      response = await getClient().sendRequest<PreviewResponse>(PreviewMethodName, requestParams);
+    } catch (error) {
+      this.log('error', `Failed to send preview request: ${error}`);
+      throw error;
     }
+
+    this.log('info', `Preview response received. Has error: ${!!response.error}`);
+
+    if (response.error) {
+      this.log(
+        'error',
+        `Preview response error details: ${JSON.stringify(response.error, null, 2)}`
+      );
+
+      // Try to provide more helpful error information
+      let errorMessage = '';
+      if (Array.isArray(response.error)) {
+        errorMessage = response.error
+          .map(err => (typeof err === 'object' ? JSON.stringify(err, null, 2) : String(err)))
+          .join('\n');
+      } else {
+        errorMessage = String(response.error);
+      }
+
+      this.log('error', `Formatted error message: ${errorMessage}`);
+      throw new Error(`Error rendering prompt: ${uri}\n${errorMessage}`);
+    }
+
+    this.log(
+      'info',
+      `Successfully rendered prompt. Content type: ${Array.isArray(response.content) ? 'Message[]' : 'RichContent'}`
+    );
     return response.content;
   }
 
@@ -198,7 +330,12 @@ export class TestCommand implements Command {
     prompt: Message[] | RichContent,
     settings: LanguageModelSetting
   ): AsyncGenerator<string> {
-    if (settings.provider === 'microsoft' && settings.apiUrl?.includes('.models.ai.azure.com')) {
+    if (settings.provider === 'vscode') {
+      yield* this.vscodeStream(prompt as Message[], settings);
+    } else if (
+      settings.provider === 'microsoft' &&
+      settings.apiUrl?.includes('.models.ai.azure.com')
+    ) {
       yield* this.azureAiStream(prompt as Message[], settings);
     } else {
       yield* this.langchainStream(prompt, settings);
@@ -267,6 +404,68 @@ export class TestCommand implements Command {
         chunks.push(Buffer.from(chunk));
       }
       return Buffer.concat(chunks).toString('utf-8');
+    }
+  }
+
+  private async *vscodeStream(
+    prompt: Message[],
+    settings: LanguageModelSetting
+  ): AsyncGenerator<string> {
+    if (!this.isChatting) {
+      throw new Error('VSCode Language Model API only supports chat models.');
+    }
+
+    const llmService = VSCodeLLMService.getInstance();
+    const selectedModelId = settings.vscode?.selectedModel;
+
+    if (!selectedModelId) {
+      throw new Error('No VSCode language model selected.');
+    }
+
+    try {
+      const options: any = {};
+      if (settings.temperature !== undefined) {
+        options.temperature = settings.temperature;
+      }
+      if (settings.maxTokens) {
+        options.maxTokens = settings.maxTokens;
+      }
+
+      // Create a VSCode CancellationToken from AbortSignal
+      const abortController = GenerationController.getNewAbortController();
+      const cancellationTokenSource = new vscode.CancellationTokenSource();
+
+      // Link AbortSignal to CancellationToken
+      abortController.signal.addEventListener('abort', () => {
+        cancellationTokenSource.cancel();
+      });
+
+      const stream = await llmService.sendRequest(
+        prompt,
+        selectedModelId,
+        options,
+        cancellationTokenSource.token
+      );
+
+      for await (const chunk of stream) {
+        yield chunk;
+      }
+    } catch (error) {
+      if (error instanceof vscode.LanguageModelError) {
+        // Handle different types of LanguageModelError
+        if (error instanceof vscode.LanguageModelError.NoPermissions) {
+          throw new Error(
+            'No permission to access language models. Please authenticate with a language model provider.'
+          );
+        } else if (error instanceof vscode.LanguageModelError.Blocked) {
+          throw new Error('Access to language models is blocked.');
+        } else if (error instanceof vscode.LanguageModelError.NotFound) {
+          throw new Error('Selected language model not found.');
+        } else {
+          throw new Error(`Language model error: ${error.message}`);
+        }
+      }
+      throw error;
     }
   }
 
@@ -360,6 +559,7 @@ export class TestCommand implements Command {
   }
 
   private toMessageObjects(messages: Message[], style: 'openai' | 'google') {
+    // Note: style parameter reserved for future use to handle different message formats
     const speakerMapping = {
       ai: 'assistant',
       human: 'user',
@@ -448,7 +648,7 @@ export class TestRerunCommand implements Command {
   public id = 'poml.testRerun';
   private readonly outputChannel: vscode.OutputChannel;
 
-  constructor(previewManager: POMLWebviewPanelManager) {
+  constructor(_previewManager: POMLWebviewPanelManager) {
     this.outputChannel = getOutputChannel();
   }
 
@@ -468,7 +668,7 @@ export class TestRerunCommand implements Command {
 export class TestAbortCommand implements Command {
   public readonly id = 'poml.testAbort';
 
-  public constructor(private readonly previewManager: POMLWebviewPanelManager) {}
+  public constructor(_previewManager: POMLWebviewPanelManager) {}
 
   public execute() {
     getTelemetryReporter()?.reportTelemetry(TelemetryEvent.PromptTestingAbort, {});

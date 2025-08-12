@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 
-export type LanguageModelProvider = 'openai' | 'microsoft' | 'anthropic' | 'google';
+export type LanguageModelProvider = 'openai' | 'microsoft' | 'anthropic' | 'google' | 'vscode';
 
 export interface LanguageModelSetting {
   provider: LanguageModelProvider;
@@ -11,6 +11,11 @@ export interface LanguageModelSetting {
   apiUrl?: string;
   apiVersion?: string;
   maxTokens?: number;
+  // VSCode LLM specific settings
+  vscode?: {
+    selectedModel?: string;
+    authenticationStatus?: 'unknown' | 'authenticated' | 'unauthenticated';
+  };
 }
 
 export interface ResourceOptions {
@@ -65,6 +70,13 @@ export class Settings {
       apiUrl: pomlSettings.get<string>('languageModel.apiUrl', '') || undefined,
       apiVersion: pomlSettings.get<string>('languageModel.apiVersion', '') || undefined,
       maxTokens: pomlSettings.get<number>('languageModel.maxTokens', 0) || undefined,
+      vscode: {
+        selectedModel: pomlSettings.get<string>('languageModel.vscode.selectedModel', '') || undefined,
+        authenticationStatus: pomlSettings.get<'unknown' | 'authenticated' | 'unauthenticated'>(
+          'languageModel.vscode.authenticationStatus',
+          'unknown'
+        ),
+      },
     }
 
     this.styles = pomlSettings.get<string[]>('styles', []);
@@ -94,12 +106,42 @@ export class Settings {
       return false;
     }
     for (const prop in this.languageModel) {
-      if ((this.languageModel as any)[prop] !== (otherSettings.languageModel as any)[prop]) {
+      if (prop === 'vscode') {
+        // Special handling for VSCode settings
+        const thisVscode = this.languageModel.vscode;
+        const otherVscode = otherSettings.languageModel.vscode;
+        if (!thisVscode && !otherVscode) {
+          continue;
+        }
+        if (!thisVscode || !otherVscode) {
+          return false;
+        }
+        if (thisVscode.selectedModel !== otherVscode.selectedModel ||
+            thisVscode.authenticationStatus !== otherVscode.authenticationStatus) {
+          return false;
+        }
+      } else if ((this.languageModel as any)[prop] !== (otherSettings.languageModel as any)[prop]) {
         return false;
       }
     }
 
     return true;
+  }
+
+  /**
+   * Check if VSCode LLM provider is selected and properly configured
+   */
+  public isVSCodeLLMConfigured(): boolean {
+    return this.languageModel.provider === 'vscode' &&
+           this.languageModel.vscode?.authenticationStatus === 'authenticated' &&
+           !!this.languageModel.vscode?.selectedModel;
+  }
+
+  /**
+   * Check if the current provider requires external API configuration
+   */
+  public requiresExternalAPIConfig(): boolean {
+    return this.languageModel.provider !== 'vscode';
   }
 
   [key: string]: any;

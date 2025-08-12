@@ -17,3 +17,9 @@ export {
   DeletePromptCommand,
   EditPromptCommand,
 } from './promptGallery';
+export {
+  CheckVSCodeLLMAuthCommand,
+  SelectVSCodeLLMModelCommand,
+  ShowVSCodeLLMStatusCommand,
+  ConfigureVSCodeLLMCommand,
+} from './vscodeLLMCommand';
