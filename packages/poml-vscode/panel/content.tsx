@@ -28,12 +28,17 @@ function ButtonContent(props: { icon: string; content: string }) {
 }
 
 function ToolBar(props: WebviewUserOptions) {
-  const { speakerMode, displayFormat } = props;
+  const { speakerMode, displayFormat, previewMode = 'poml' } = props;
 
   const applicableDisplayFormats = [
     { value: 'rendered', content: 'Rendered' },
     { value: 'plain', content: 'Plain Text' },
     { value: 'ir', content: 'IR (debug mode)' }
+  ];
+
+  const previewModes = [
+    { value: 'poml', content: 'POML' },
+    { value: 'markdown', content: 'Markdown' }
   ];
 
   return (
@@ -85,6 +90,29 @@ function ToolBar(props: WebviewUserOptions) {
                 role="menuitem"
                 tabIndex={0}
                 aria-label={`Display format: ${item.content}`}
+              >
+                <ButtonContent icon="check" content={item.content} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="button menu-selection" id="preview-mode" data-value={previewMode} role="button" tabIndex={0} aria-label="Select preview mode">
+          <ButtonContent
+            icon="preview"
+            content={`Preview: ${previewModes.find(val => val.value === previewMode)?.content}`}
+          />
+          <div className="expand">
+            <i className="codicon codicon-triangle-down"></i>
+          </div>
+          <div className="menu">
+            {previewModes.map(item => (
+              <div
+                className={`item ${previewMode === item.value ? 'selected' : ''}`}
+                data-value={item.value}
+                key={item.value}
+                role="menuitem"
+                tabIndex={0}
+                aria-label={`Preview mode: ${item.content}`}
               >
                 <ButtonContent icon="check" content={item.content} />
               </div>
@@ -232,13 +260,23 @@ function ChatMessages(props: {
 }
 
 function Content(props: WebviewUserOptions & PreviewResponse) {
-  let { displayFormat, ir, content, sourceMap, rawText, tokens } = props;
+  let { displayFormat, ir, content, sourceMap, rawText, tokens, previewMode = 'poml' } = props;
 
   let toCopy: string =
     typeof content === 'string'
       ? content
       : JSON.stringify(content, null, 2);
   let result: React.ReactElement;
+
+  // If in markdown preview mode, render the raw text as markdown
+  if (previewMode === 'markdown') {
+    const markdownContent = rawText || (typeof content === 'string' ? content : JSON.stringify(content, null, 2));
+    result = (
+      <div className="main-container">
+        <Markdown content={markdownContent} />
+      </div>
+    );
+  } else {
   if (content.length > 0 && content[0].hasOwnProperty('speaker')) {
     content = content as Message[];
     if (displayFormat === 'ir') {
@@ -270,6 +308,7 @@ function Content(props: WebviewUserOptions & PreviewResponse) {
       result = <div>Invalid display format</div>;
     }
   }
+  } // Close the else block for previewMode === 'poml'
 
   return (
     <div className="main" id="content">

@@ -57,7 +57,8 @@ export class POMLWebviewPanel {
         speakerMode: state.speakerMode,
         displayFormat: state.displayFormat,
         contexts: state.contexts ?? [],
-        stylesheets: state.stylesheets ?? []
+        stylesheets: state.stylesheets ?? [],
+        previewMode: state.previewMode ?? 'poml'
       },
       context,
       previewConfigurations,
@@ -93,11 +94,16 @@ export class POMLWebviewPanel {
       }
     );
 
+    // Get preview mode from settings
+    const config = vscode.workspace.getConfiguration('poml');
+    const previewMode = config.get<'poml' | 'markdown'>('preview.mode', 'poml');
+
     const userOptions: WebviewUserOptions = {
       speakerMode: true,
       displayFormat: 'plain',
       contexts: [],
-      stylesheets: []
+      stylesheets: [],
+      previewMode: previewMode
     };
 
     return new POMLWebviewPanel(

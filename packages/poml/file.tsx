@@ -838,7 +838,15 @@ export class PomlFile {
     const isInclude = tagName.toLowerCase() === 'include';
 
     // Common logic for handling for-loops
+    const hasForAttribute = element.attributes.some(
+      attr => attr.key?.toLowerCase() === 'for'
+    );
     const forLoops = this.handleForLoop(element, globalContext);
+    // If there is an explicit for attribute and it evaluates to an empty list,
+    // we should render zero iterations (instead of one empty context iteration).
+    if (hasForAttribute && forLoops.length === 0) {
+      return <></>;
+    }
     const forLoopedContext = forLoops.length > 0 ? forLoops : [{}];
     const resultElements: React.ReactElement[] = [];
 

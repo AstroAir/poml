@@ -22,4 +22,12 @@ export {
   SelectVSCodeLLMModelCommand,
   ShowVSCodeLLMStatusCommand,
   ConfigureVSCodeLLMCommand,
+  QuickSetupVSCodeLLMCommand,
 } from './vscodeLLMCommand';
+export {
+  CheckOpenRouterAuthCommand,
+  SelectOpenRouterModelCommand,
+  ShowOpenRouterStatusCommand,
+  ConfigureOpenRouterCommand,
+  QuickSetupOpenRouterCommand,
+} from './openrouterCommand';

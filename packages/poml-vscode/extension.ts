@@ -54,6 +54,12 @@ export function activate(context: vscode.ExtensionContext) {
   commandManager.register(new command.SelectVSCodeLLMModelCommand());
   commandManager.register(new command.ShowVSCodeLLMStatusCommand());
   commandManager.register(new command.ConfigureVSCodeLLMCommand());
+  commandManager.register(new command.QuickSetupVSCodeLLMCommand());
+  commandManager.register(new command.CheckOpenRouterAuthCommand());
+  commandManager.register(new command.SelectOpenRouterModelCommand());
+  commandManager.register(new command.ShowOpenRouterStatusCommand());
+  commandManager.register(new command.ConfigureOpenRouterCommand());
+  commandManager.register(new command.QuickSetupOpenRouterCommand());
 
   registerPomlChatParticipant(context, galleryProvider);
 

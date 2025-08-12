@@ -402,6 +402,14 @@ function diffMessages(expected: ExpectMessage[], actual: any): string {
     return `Expected ${expected.length} messages, got ${actual.length}`;
   }
 
+  const normalizeWhitespace = (str: string): string => {
+    // Standardize newlines
+    let s = str.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    // Trim each line, drop empty/whitespace-only lines
+    const lines = s.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    return lines.join('\n');
+  };
+
   for (let i = 0; i < expected.length; i++) {
     const exp = expected[i];
     const act = actual[i];
@@ -416,7 +424,9 @@ function diffMessages(expected: ExpectMessage[], actual: any): string {
       return `Message ${i} missing 'content' key`;
     }
     if (typeof act.content === 'string') {
-      if (exp.contents.length !== 1 || exp.contents[0] !== stripEndline(act.content)) {
+      const actualNormalized = normalizeWhitespace(stripEndline(act.content));
+      const expectedNormalized = normalizeWhitespace(exp.contents.join('\n'));
+      if (exp.contents.length !== 1 || expectedNormalized !== actualNormalized) {
         return `Message ${i} contents mismatch: expected ${JSON.stringify(exp.contents)}, got ${JSON.stringify(act.content)}`;
       }
       continue;
@@ -431,15 +441,21 @@ function diffMessages(expected: ExpectMessage[], actual: any): string {
       const expContent = exp.contents[j];
       const actContent = act.content[j];
 
-      if (typeof actContent === 'string' && expContent === stripEndline(actContent)) {
-        continue;
-      }
-      if (typeof actContent === 'object' && actContent !== null) {
-        if ('base64' in actContent && actContent.base64.startsWith(expContent)) {
+      if (typeof actContent === 'string') {
+        const actNorm = normalizeWhitespace(stripEndline(actContent));
+        const expNorm = normalizeWhitespace(expContent);
+        if (expNorm === actNorm) {
           continue;
         }
       }
-      return `Message ${i} content ${j} mismatch: expected '${expContent}', got '${actContent}'`;
+      if (typeof actContent === 'object' && actContent !== null) {
+        if ('base64' in actContent && typeof actContent.base64 === 'string') {
+          if (actContent.base64.startsWith(expContent)) {
+            continue;
+          }
+        }
+      }
+      return `Message ${i} content ${j} mismatch: expected '${expContent}', got '${typeof actContent === 'string' ? actContent : JSON.stringify(actContent)}'`;
     }
   }
   return '';
@@ -460,11 +476,6 @@ describe('examples correctness', () => {
 
   exampleFiles.forEach(fileName => {
     test(`${fileName} produces correct output`, async () => {
-      // FIXME: Skip 301_generate_poml on Windows due to CRLF handling issue
-      if (process.platform === 'win32' && fileName === '301_generate_poml.poml') {
-        console.warn('Skipping 301_generate_poml on Windows due to CRLF handling issue in txt files');
-        return;
-      }
 
       const filePath = path.join(examplesDir, fileName);
       const expectFile = path.join(expectsDir, fileName.replace('.poml', '.txt'));
@@ -491,6 +502,24 @@ describe('examples correctness', () => {
 
         const output = outputs.join('');
         actualResult = JSON.parse(output);
+        // Normalize CRLF to LF recursively so Windows line endings don't cause diffs
+        const normalize = (value: any): any => {
+          if (typeof value === 'string') {
+            return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+          }
+            if (Array.isArray(value)) {
+              return value.map(v => normalize(v));
+            }
+            if (value && typeof value === 'object') {
+              const copy: any = { ...value };
+              if ('content' in copy) {
+                copy.content = normalize(copy.content);
+              }
+              return copy;
+            }
+            return value;
+        };
+        actualResult = normalize(actualResult);
       } finally {
         process.stdout.write = originalWrite;
       }

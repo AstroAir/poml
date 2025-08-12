@@ -236,12 +236,42 @@ export class ConfigureVSCodeLLMCommand implements Command {
       return;
     }
 
-    // Show configuration wizard
-    const steps = [
-      'Check Authentication',
-      'Select Model',
-      'Test Configuration'
-    ];
+    // First, do a quick setup check to see what's needed
+    const setupCheck = await llmService.quickSetupCheck();
+
+    if (setupCheck.isReady) {
+      // Already configured and ready to use
+      const message = setupCheck.skipAuthCheck
+        ? 'VSCode Language Models are ready! (Using cached authentication)'
+        : 'VSCode Language Models are already configured and ready to use!';
+
+      const action = await vscode.window.showInformationMessage(
+        message,
+        'Select Different Model',
+        'Test Configuration',
+        'OK'
+      );
+
+      switch (action) {
+        case 'Select Different Model':
+          await vscode.commands.executeCommand('poml.selectVSCodeLLMModel');
+          break;
+        case 'Test Configuration':
+          await this.testConfiguration();
+          break;
+      }
+      return;
+    }
+
+    // Show configuration wizard for missing steps only
+    const steps: string[] = [];
+    if (setupCheck.needsAuthentication) {
+      steps.push('Check Authentication');
+    }
+    if (setupCheck.needsModelSelection) {
+      steps.push('Select Model');
+    }
+    steps.push('Test Configuration');
 
     let currentStep = 0;
 
@@ -295,7 +325,7 @@ export class ConfigureVSCodeLLMCommand implements Command {
 
   private async checkAuthentication(): Promise<{ success: boolean; retry?: boolean }> {
     const llmService = VSCodeLLMService.getInstance();
-    const result = await llmService.checkAuthenticationAndDiscoverModels();
+    const result = await llmService.checkAuthenticationAndDiscoverModels(true); // Force refresh
 
     if (result.isAuthenticated) {
       return { success: true };
@@ -326,32 +356,29 @@ export class ConfigureVSCodeLLMCommand implements Command {
     const models = llmService.getAvailableModels();
 
     if (models.length === 0) {
-      const action = await vscode.window.showWarningMessage(
-        'No language models available.',
+      const action = await vscode.window.showErrorMessage(
+        'No language models available. Please authenticate with a language model provider first.',
         'Go Back',
         'Cancel'
       );
-      return { success: false, goBack: action === 'Go Back' };
+
+      return {
+        success: false,
+        goBack: action === 'Go Back'
+      };
     }
 
-    const currentSettings = llmService.getSettings();
     const items = models.map(model => ({
       label: model.name,
-      description: `${model.vendor} • ${model.id}`,
+      description: `${model.vendor}${model.family ? ` • ${model.family}` : ''}${model.version ? ` • ${model.version}` : ''}`,
       detail: model.maxInputTokens ? `Max tokens: ${model.maxInputTokens.toLocaleString()}` : undefined,
-      model: model
+      model
     }));
 
-    // Mark currently selected model
-    const currentModelIndex = items.findIndex(item => item.model.id === currentSettings.selectedModel);
-    if (currentModelIndex >= 0) {
-      items[currentModelIndex].label = `$(check) ${items[currentModelIndex].label}`;
-    }
-
     const selected = await vscode.window.showQuickPick(items, {
-      title: 'Select VSCode Language Model',
-      placeHolder: 'Choose a language model to use with POML',
-      ignoreFocusOut: true
+      placeHolder: 'Select a language model',
+      matchOnDescription: true,
+      matchOnDetail: true
     });
 
     if (!selected) {
@@ -367,23 +394,102 @@ export class ConfigureVSCodeLLMCommand implements Command {
     await config.update('languageModel.provider', 'vscode', vscode.ConfigurationTarget.Global);
 
     const action = await vscode.window.showInformationMessage(
-      'VSCode Language Model provider has been set. You can now test your prompts using the VSCode language models.',
-      'Test Now',
-      'Finish'
+      'VSCode Language Model provider has been set as the default. You can now use POML with VSCode Language Models!',
+      'OK',
+      'Go Back'
     );
 
-    if (action === 'Test Now') {
-      // Try to run a test if there's an active POML file
-      const activeEditor = vscode.window.activeTextEditor;
-      if (activeEditor && activeEditor.document.languageId === 'poml') {
-        await vscode.commands.executeCommand('poml.test');
-      } else {
-        vscode.window.showInformationMessage(
-          'Open a POML file and use the "Test current prompt on Chat Models" command to test your configuration.'
-        );
+    return {
+      success: action !== 'Go Back',
+      goBack: action === 'Go Back'
+    };
+  }
+}
+
+/**
+ * Command for quick VSCode LLM setup - automatically detects what's needed
+ */
+export class QuickSetupVSCodeLLMCommand implements Command {
+  public readonly id = 'poml.quickSetupVSCodeLLM';
+
+  public async execute(): Promise<void> {
+    const llmService = VSCodeLLMService.getInstance();
+
+    if (!llmService.isAvailable()) {
+      vscode.window.showErrorMessage(
+        'VSCode Language Model API is not available. Please update to VSCode 1.90 or newer.',
+        'Learn More'
+      ).then(action => {
+        if (action === 'Learn More') {
+          vscode.env.openExternal(vscode.Uri.parse(
+            'https://code.visualstudio.com/docs/copilot/copilot-extensibility'
+          ));
+        }
+      });
+      return;
+    }
+
+    // Check current setup status
+    const setupCheck = await llmService.quickSetupCheck();
+
+    if (setupCheck.isReady) {
+      const message = setupCheck.skipAuthCheck
+        ? 'VSCode Language Models are ready to use! (Using cached authentication) 🎉'
+        : 'VSCode Language Models are already configured and ready to use! 🎉';
+
+      vscode.window.showInformationMessage(message);
+      return;
+    }
+
+    if (setupCheck.needsAuthentication) {
+      const action = await vscode.window.showInformationMessage(
+        'You need to authenticate with a language model provider (like GitHub Copilot) to use VSCode Language Models.',
+        'Learn More',
+        'Check Authentication',
+        'Cancel'
+      );
+
+      switch (action) {
+        case 'Learn More':
+          vscode.env.openExternal(vscode.Uri.parse(
+            'https://code.visualstudio.com/docs/copilot/copilot-extensibility'
+          ));
+          return;
+        case 'Check Authentication':
+          const result = await llmService.checkAuthenticationAndDiscoverModels(true);
+          if (!result.isAuthenticated) {
+            vscode.window.showErrorMessage(
+              result.error || 'Authentication failed. Please authenticate with a language model provider first.',
+              'Learn More'
+            ).then(action => {
+              if (action === 'Learn More') {
+                vscode.env.openExternal(vscode.Uri.parse(
+                  'https://code.visualstudio.com/docs/copilot/copilot-extensibility'
+                ));
+              }
+            });
+            return;
+          }
+          break;
+        default:
+          return;
       }
     }
 
-    return { success: true };
+    if (setupCheck.needsModelSelection) {
+      const models = llmService.getAvailableModels();
+      if (models.length === 0) {
+        vscode.window.showErrorMessage('No models available. Please authenticate with a language model provider first.');
+        return;
+      }
+
+      await vscode.commands.executeCommand('poml.selectVSCodeLLMModel');
+      return;
+    }
+
+    // If we get here, everything should be ready
+    vscode.window.showInformationMessage(
+      'VSCode Language Models setup completed successfully! 🎉'
+    );
   }
 }

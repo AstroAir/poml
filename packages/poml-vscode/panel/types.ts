@@ -46,6 +46,7 @@ export interface WebviewUserOptions {
   displayFormat: 'rendered' | 'plain' | 'ir';
   contexts: string[];
   stylesheets: string[];
+  previewMode?: 'poml' | 'markdown';
 }
 
 export const PreviewMethodName = 'poml/preview';

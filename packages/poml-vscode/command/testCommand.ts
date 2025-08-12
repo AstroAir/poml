@@ -26,6 +26,7 @@ import { IncomingMessage } from 'node:http';
 import { getTelemetryReporter } from 'poml-vscode/util/telemetryClient';
 import { TelemetryEvent } from 'poml-vscode/util/telemetryServer';
 import { VSCodeLLMService } from '../vscode-llm-service';
+import { OpenRouterService } from '../openrouter-service';
 
 let _globalGenerationController: GenerationController | undefined = undefined;
 
@@ -146,6 +147,46 @@ export class TestCommand implements Command {
         this.log('error', 'Prompt test aborted: No VSCode LLM model selected.');
         return;
       }
+    } else if (setting.provider === 'openrouter') {
+      const openRouterService = OpenRouterService.getInstance();
+
+      const openRouterSettings = openRouterService.getSettings();
+      if (!openRouterSettings.apiKey) {
+        const action = await vscode.window.showErrorMessage(
+          'OpenRouter API key is not configured.',
+          'Configure API Key'
+        );
+        if (action === 'Configure API Key') {
+          await vscode.commands.executeCommand('poml.configureOpenRouter');
+        }
+        this.log('error', 'Prompt test aborted: OpenRouter API key not configured.');
+        return;
+      }
+
+      const authStatus = openRouterService.getAuthenticationStatus();
+      if (authStatus !== 'authenticated') {
+        const action = await vscode.window.showErrorMessage(
+          'You need to authenticate with OpenRouter first.',
+          'Check Authentication'
+        );
+        if (action === 'Check Authentication') {
+          await vscode.commands.executeCommand('poml.checkOpenRouterAuth');
+        }
+        this.log('error', 'Prompt test aborted: OpenRouter not authenticated.');
+        return;
+      }
+
+      if (!openRouterSettings.selectedModel) {
+        const action = await vscode.window.showErrorMessage(
+          'No OpenRouter model selected.',
+          'Select Model'
+        );
+        if (action === 'Select Model') {
+          await vscode.commands.executeCommand('poml.selectOpenRouterModel');
+        }
+        this.log('error', 'Prompt test aborted: No OpenRouter model selected.');
+        return;
+      }
     } else {
       // Validate external provider settings
       if (!setting.model || !setting.apiKey || !setting.apiUrl) {
@@ -242,29 +283,28 @@ export class TestCommand implements Command {
     // Provide comprehensive context variables that POML templates might expect
     // For test command, we provide default/placeholder values since there's no user interaction
 
-    // Get the currently active file if available to provide as context
-    const activeEditor = vscode.window.activeTextEditor;
-    const activeFile = activeEditor?.document.uri.fsPath;
+    // For test command, we don't use actual files to avoid file system errors
+    // Instead, we provide safe default context values
+    this.log('info', 'Using safe default context for test command (no external files)');
 
+    // For test command, provide safe default context that doesn't require external files
+    // This prevents errors when templates reference files that don't exist
+    // We use empty files array to prevent the template from trying to read non-existent files
     const inlineContext = {
-      files: activeFile ? [activeFile] : [], // Use active file if available, otherwise empty
-      file: activeFile || '', // Single file variable (for templates that might reference it directly)
+      files: [], // Always empty for test command to prevent file read errors
+      file: '', // Empty string to prevent undefined variable errors
       prompt: 'Test prompt execution', // Default prompt text for testing
       // Add other common variables that templates might expect
       user: 'Test User',
       task: 'Test prompt execution',
-      request: 'Test prompt execution'
+      request: 'Test prompt execution',
+      // Additional safe defaults
+      content: 'Sample content for testing',
+      text: 'Sample text for testing'
     };
 
-    // If no active file is available, provide a helpful message in the context
-    if (!activeFile) {
-      this.log(
-        'info',
-        'No active file available. Templates requiring file content may not render properly.'
-      );
-      // You could also provide a dummy file path here if needed:
-      // inlineContext.files = [path.join(__dirname, 'dummy.txt')];
-    }
+    // Log the context being used for testing
+    this.log('info', 'Test context prepared with safe default values (no external files)');
 
     this.log('info', `Inline context: ${JSON.stringify(inlineContext, null, 2)}`);
 
@@ -332,6 +372,8 @@ export class TestCommand implements Command {
   ): AsyncGenerator<string> {
     if (settings.provider === 'vscode') {
       yield* this.vscodeStream(prompt as Message[], settings);
+    } else if (settings.provider === 'openrouter') {
+      yield* this.openrouterStream(prompt as Message[], settings);
     } else if (
       settings.provider === 'microsoft' &&
       settings.apiUrl?.includes('.models.ai.azure.com')
@@ -464,6 +506,48 @@ export class TestCommand implements Command {
         } else {
           throw new Error(`Language model error: ${error.message}`);
         }
+      }
+      throw error;
+    }
+  }
+
+  private async *openrouterStream(
+    prompt: Message[],
+    settings: LanguageModelSetting
+  ): AsyncGenerator<string> {
+    if (!this.isChatting) {
+      throw new Error('OpenRouter only supports chat models.');
+    }
+
+    const openRouterService = OpenRouterService.getInstance();
+    const selectedModelId = settings.openrouter?.selectedModel;
+
+    if (!selectedModelId) {
+      throw new Error('No OpenRouter model selected.');
+    }
+
+    try {
+      const options: any = {};
+      if (settings.temperature !== undefined) {
+        options.temperature = settings.temperature;
+      }
+      if (settings.maxTokens) {
+        options.maxTokens = settings.maxTokens;
+      }
+      options.stream = true; // Enable streaming
+
+      const stream = await openRouterService.sendRequest(
+        prompt,
+        selectedModelId,
+        options
+      );
+
+      for await (const chunk of stream) {
+        yield chunk;
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`OpenRouter error: ${error.message}`);
       }
       throw error;
     }

@@ -6,6 +6,7 @@ import {
   ShowVSCodeLLMStatusCommand,
   ConfigureVSCodeLLMCommand 
 } from '../command/vscodeLLMCommand';
+import { Settings } from '../settings';
 
 suite('VSCode LLM Commands Tests', () => {
   test('CheckVSCodeLLMAuthCommand should have correct ID', () => {
@@ -85,8 +86,6 @@ suite('Settings Class Integration Tests', () => {
     // Create a mock URI for testing
     const testUri = vscode.Uri.file('/test/file.poml');
     
-    // Import the Settings class
-    const { Settings } = require('../settings');
     const settings = Settings.getForResource(testUri);
     
     // Test that the settings object has the expected structure
@@ -98,15 +97,14 @@ suite('Settings Class Integration Tests', () => {
       assert.ok(typeof settings.languageModel.vscode.selectedModel === 'string' || 
                 settings.languageModel.vscode.selectedModel === undefined, 
                 'selectedModel should be string or undefined');
-      assert.ok(['unknown', 'authenticated', 'unauthenticated'].includes(
-                settings.languageModel.vscode.authenticationStatus), 
-                'authenticationStatus should be valid enum value');
+  const authStatus = settings.languageModel.vscode.authenticationStatus ?? 'unknown';
+  assert.ok(['unknown', 'authenticated', 'unauthenticated'].includes(authStatus), 
+        'authenticationStatus should be valid enum value');
     }
   });
 
   test('Settings helper methods should work correctly', () => {
     const testUri = vscode.Uri.file('/test/file.poml');
-    const { Settings } = require('../settings');
     
     // Test with VSCode provider
     const config = vscode.workspace.getConfiguration('poml');

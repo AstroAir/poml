@@ -195,6 +195,30 @@
         "title": "Configure VSCode Language Models",
         "category": "POML",
         "icon": "$(settings)"
+      },
+      {
+        "command": "poml.checkOpenRouterAuth",
+        "title": "Check OpenRouter Authentication",
+        "category": "POML",
+        "icon": "$(key)"
+      },
+      {
+        "command": "poml.selectOpenRouterModel",
+        "title": "Select OpenRouter Language Model",
+        "category": "POML",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "poml.showOpenRouterStatus",
+        "title": "Show OpenRouter Status",
+        "category": "POML",
+        "icon": "$(info)"
+      },
+      {
+        "command": "poml.configureOpenRouter",
+        "title": "Configure OpenRouter",
+        "category": "POML",
+        "icon": "$(settings)"
       }
     ],
     "chatParticipants": [
@@ -274,23 +298,27 @@
             "microsoft",
             "anthropic",
             "google",
-            "vscode"
+            "vscode",
+            "openrouter"
           ],
           "enumItemLabels": [
             "OpenAI",
             "Azure OpenAI",
             "Anthropic",
             "Google GenAI",
-            "VSCode Language Models"
+            "VSCode Language Models",
+            "OpenRouter"
           ],
           "default": "openai",
-          "markdownDescription": "The language model provider to send your prompt to."
+          "markdownDescription": "The language model provider to send your prompt to.",
+          "order": 1
         },
         "poml.languageModel.model": {
           "type": "string",
           "description": "Language Model Name (or Deployment Name)",
           "default": "gpt-4o",
-          "markdownDescription": "The name of language model to use. It can be the deployment name for Azure OpenAI, or the model code name for Anthropic and Google."
+          "markdownDescription": "The name of language model to use. It can be the deployment name for Azure OpenAI, or the model code name for Anthropic and Google.",
+          "order": 2
         },
         "poml.languageModel.temperature": {
           "type": "number",
@@ -298,37 +326,43 @@
           "default": 0.5,
           "markdownDescription": "The sampling temperature parameter for the language model.",
           "minimum": 0,
-          "maximum": 2
+          "maximum": 2,
+          "order": 3
         },
         "poml.languageModel.maxTokens": {
           "type": "number",
           "description": "Language Model Maximum Completion Tokens",
           "default": 0,
-          "markdownDescription": "The maximum number of completion tokens. Use 0 for unlimited number of tokens."
+          "markdownDescription": "The maximum number of completion tokens. Use 0 for unlimited number of tokens.",
+          "order": 4
         },
         "poml.languageModel.apiKey": {
           "type": "string",
           "description": "Language Model API Key",
           "default": "",
-          "markdownDescription": "The API token for the language model provider."
+          "markdownDescription": "The API token for the language model provider.",
+          "order": 5
         },
         "poml.languageModel.apiUrl": {
           "type": "string",
           "description": "Language Model API URL",
           "default": "",
-          "markdownDescription": "The API endpoint for the language model provider. When using Azure OpenAI, this should be the endpoint of the deployment, e.g., `https://westeurope.api.cognitive.microsoft.com/`. Or it can be `https://api.example.com/v2/` for OpenAI-like providers."
+          "markdownDescription": "The API endpoint for the language model provider. When using Azure OpenAI, this should be the endpoint of the deployment, e.g., `https://westeurope.api.cognitive.microsoft.com/`. Or it can be `https://api.example.com/v2/` for OpenAI-like providers.",
+          "order": 6
         },
         "poml.languageModel.apiVersion": {
           "type": "string",
           "description": "Language Model API Version",
           "default": "",
-          "markdownDescription": "The API version for the language model provider (mostly used for OpenAI and Azure OpenAI)."
+          "markdownDescription": "The API version for the language model provider (mostly used for OpenAI and Azure OpenAI).",
+          "order": 7
         },
         "poml.languageModel.vscode.selectedModel": {
           "type": "string",
           "description": "Selected VSCode Language Model",
           "default": "",
-          "markdownDescription": "The selected language model from VSCode's available models. Use the command 'POML: Select VSCode Language Model' to choose from available models."
+          "markdownDescription": "The selected language model from VSCode's available models. Use the command 'POML: Select VSCode Language Model' to choose from available models.",
+          "order": 10
         },
         "poml.languageModel.vscode.authenticationStatus": {
           "type": "string",
@@ -339,7 +373,48 @@
             "unauthenticated"
           ],
           "default": "unknown",
-          "markdownDescription": "The authentication status for VSCode language models. This is automatically updated by the extension."
+          "markdownDescription": "The authentication status for VSCode language models. This is automatically updated by the extension.",
+          "order": 11
+        },
+        "poml.languageModel.openrouter.selectedModel": {
+          "type": "string",
+          "description": "Selected OpenRouter Language Model",
+          "default": "",
+          "markdownDescription": "The selected language model from OpenRouter's available models. Use the command 'POML: Select OpenRouter Language Model' to choose from available models.",
+          "order": 12
+        },
+        "poml.languageModel.openrouter.authenticationStatus": {
+          "type": "string",
+          "description": "OpenRouter Authentication Status",
+          "enum": [
+            "unknown",
+            "authenticated",
+            "unauthenticated"
+          ],
+          "default": "unknown",
+          "markdownDescription": "The authentication status for OpenRouter. This is automatically updated by the extension.",
+          "order": 13
+        },
+        "poml.languageModel.openrouter.apiKey": {
+          "type": "string",
+          "description": "OpenRouter API Key",
+          "default": "",
+          "markdownDescription": "Your OpenRouter API key. Get one from https://openrouter.ai/keys",
+          "order": 14
+        },
+        "poml.preview.mode": {
+          "type": "string",
+          "description": "Preview Mode",
+          "enum": [
+            "poml",
+            "markdown"
+          ],
+          "enumItemLabels": [
+            "POML Preview",
+            "Markdown Preview"
+          ],
+          "default": "poml",
+          "markdownDescription": "Choose between POML preview and Markdown preview modes for the side panel."
         },
         "poml.telemetry.connection": {
           "type": "string",

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 
-export type LanguageModelProvider = 'openai' | 'microsoft' | 'anthropic' | 'google' | 'vscode';
+export type LanguageModelProvider = 'openai' | 'microsoft' | 'anthropic' | 'google' | 'vscode' | 'openrouter';
 
 export interface LanguageModelSetting {
   provider: LanguageModelProvider;
@@ -15,6 +15,12 @@ export interface LanguageModelSetting {
   vscode?: {
     selectedModel?: string;
     authenticationStatus?: 'unknown' | 'authenticated' | 'unauthenticated';
+  };
+  // OpenRouter specific settings
+  openrouter?: {
+    selectedModel?: string;
+    authenticationStatus?: 'unknown' | 'authenticated' | 'unauthenticated';
+    apiKey?: string;
   };
 }
 
@@ -77,6 +83,14 @@ export class Settings {
           'unknown'
         ),
       },
+      openrouter: {
+        selectedModel: pomlSettings.get<string>('languageModel.openrouter.selectedModel', '') || undefined,
+        authenticationStatus: pomlSettings.get<'unknown' | 'authenticated' | 'unauthenticated'>(
+          'languageModel.openrouter.authenticationStatus',
+          'unknown'
+        ),
+        apiKey: pomlSettings.get<string>('languageModel.openrouter.apiKey', '') || undefined,
+      },
     }
 
     this.styles = pomlSettings.get<string[]>('styles', []);
@@ -120,6 +134,21 @@ export class Settings {
             thisVscode.authenticationStatus !== otherVscode.authenticationStatus) {
           return false;
         }
+      } else if (prop === 'openrouter') {
+        // Special handling for OpenRouter settings
+        const thisOpenRouter = this.languageModel.openrouter;
+        const otherOpenRouter = otherSettings.languageModel.openrouter;
+        if (!thisOpenRouter && !otherOpenRouter) {
+          continue;
+        }
+        if (!thisOpenRouter || !otherOpenRouter) {
+          return false;
+        }
+        if (thisOpenRouter.selectedModel !== otherOpenRouter.selectedModel ||
+            thisOpenRouter.authenticationStatus !== otherOpenRouter.authenticationStatus ||
+            thisOpenRouter.apiKey !== otherOpenRouter.apiKey) {
+          return false;
+        }
       } else if ((this.languageModel as any)[prop] !== (otherSettings.languageModel as any)[prop]) {
         return false;
       }
@@ -135,6 +164,16 @@ export class Settings {
     return this.languageModel.provider === 'vscode' &&
            this.languageModel.vscode?.authenticationStatus === 'authenticated' &&
            !!this.languageModel.vscode?.selectedModel;
+  }
+
+  /**
+   * Check if OpenRouter provider is selected and properly configured
+   */
+  public isOpenRouterConfigured(): boolean {
+    return this.languageModel.provider === 'openrouter' &&
+           this.languageModel.openrouter?.authenticationStatus === 'authenticated' &&
+           !!this.languageModel.openrouter?.selectedModel &&
+           !!this.languageModel.openrouter?.apiKey;
   }
 
   /**
